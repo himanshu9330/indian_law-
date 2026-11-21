@@ -1,330 +1,292 @@
-# ⚖️ LexAI — AI-Powered Legal Assistant for Indian Law
+# ⚖️ LexAI — Bharat Legal SaaS: AI Legal Intelligence & Advisory Platform
 
-> An intelligent, multi-stage AI pipeline that classifies legal queries, retrieves context-aware answers via RAG, falls back to live web search, and generates structured legal guidance using Groq LLM — all orchestrated through a LangGraph workflow.
+> An enterprise-grade, multi-stage AI legal intelligence platform for the Indian Legal Framework (including **BNS 2024**, **BNSS 2024**, and **BSA 2024**). Features cluster-aware **Pinecone RAG**, calibrated **Qwen 2.5** Indian law fallback, **Alibaba Qwen3-TTS 1.7B** voice narration, and an interactive dark glassmorphic Streamlit SaaS dashboard.
 
-[![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python)](https://python.org)
-[![LangGraph](https://img.shields.io/badge/LangGraph-Workflow-orange)](https://github.com/langchain-ai/langgraph)
-[![Groq](https://img.shields.io/badge/Groq-LLM-green)](https://groq.com)
-[![Pinecone](https://img.shields.io/badge/Pinecone-VectorDB-purple)](https://www.pinecone.io)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://python.org)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.32+-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io)
+[![LangGraph](https://img.shields.io/badge/LangGraph-Workflow%20DAG-orange)](https://github.com/langchain-ai/langgraph)
+[![Qwen 2.5](https://img.shields.io/badge/LLM-Qwen%202.5%2072B%20/%20Groq-purple)](https://openrouter.ai)
+[![Qwen3-TTS](https://img.shields.io/badge/Voice-Qwen3--TTS%201.7B-blue)](https://github.com/QwenLM)
+[![Pinecone](https://img.shields.io/badge/Pinecone-VectorDB-000000?logo=pinecone)](https://www.pinecone.io)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ---
 
-## 🚀 What Is LexAI?
+## 📑 Table of Contents
+1. [Overview & Key Capabilities](#-overview--key-capabilities)
+2. [System Architecture & Execution DAG](#-system-architecture--execution-dag)
+3. [📋 Detailed Implementation Plan & Roadmap](#-detailed-implementation-plan--roadmap)
+4. [Core Modules & Pipeline Components](#-core-modules--pipeline-components)
+5. [Confidence-Based Fallback Architecture](#-confidence-based-fallback-architecture)
+6. [Voice Engine: Alibaba Qwen3-TTS 1.7B](#-voice-engine-alibaba-qwen3-tts-17b)
+7. [Repository Structure](#-repository-structure)
+8. [Installation & Setup](#-installation--setup)
+9. [Verification & Test Results](#-verification--test-results)
+10. [Author & License](#-author--license)
 
-**LexAI** is a production-grade AI Legal Assistant that helps users navigate Indian law — from understanding their legal rights to planning actionable next steps. It combines **Retrieval-Augmented Generation (RAG)**, **live web search (SerpAPI)**, and **Groq's fast LLM inference** into a single, intelligent pipeline.
+---
+
+## 🚀 Overview & Key Capabilities
+
+**LexAI** transforms statutory Indian legal codes and procedures into accessible, structured guidance for citizens, advocates, and legal researchers.
 
 ### 🎯 Key Capabilities
-
-- 🏛️ **Domain Classification** — Routes legal vs. non-legal queries intelligently
-- ⚠️ **Risk Assessment** — Classifies query risk as Low / Medium / High
-- 📚 **RAG Engine** — Semantic search over vectorized Indian legal documents
-- 🌐 **SerpAPI Fallback** — Live web context when RAG confidence is low
-- 🤖 **LLM Synthesis** — Groq-powered structured legal response generation
-- 🗺️ **Action Roadmap** — Step-by-step legal procedure guidance
-- 👨‍⚖️ **Lawyer Recommendation** — Yes / Optional / No, with reasoning
-- 🛡️ **Built-in Disclaimer** — Responsible AI legal guidance
+- 🏛️ **Indian Criminal Law Overhaul Ready**: Native mapping across the 2024 criminal codes:
+  - **BNS 2024** ⇄ **IPC 1860** (e.g. BNS § 318 ⇄ IPC § 420 Cheating; BNS § 103 ⇄ IPC § 302 Murder)
+  - **BNSS 2024** ⇄ **CrPC 1973** (e.g. BNSS § 482 ⇄ CrPC § 438 Anticipatory Bail; BNSS § 35 ⇄ CrPC § 41A Notice)
+  - **BSA 2024** ⇄ **IEA 1872** (Digital evidence, electronic certificate standards)
+- 📚 **Cluster-Aware Vector Retrieval**: 2-stage Pinecone retrieval scoped to KMeans statutory document clusters.
+- ⚡ **Confidence-Based Qwen 2.5 Fallback**: Evaluates retrieval confidence score; if confidence is low ($< 0.50$), key is missing, or Pinecone is offline, routes seamlessly to fine-tuned Indian Law reasoning via OpenRouter Qwen 2.5 / Groq.
+- 🔊 **Voice Accessibility (Qwen3-TTS 1.7B)**: In-app voice playback synthesizing natural legal advisories for audio accessibility.
+- 🗺️ **Interactive Action Roadmap**: Persistent checklist tracking evidence gathering, legal notice dispatch, and court filings.
+- 📄 **Multi-Format Export**: One-click consultation report generation in Markdown and publication-ready PDF.
+- 🛡️ **Zero Telemetry Data Sovereignty**: 100% private local persistence in SQLite (`data/lexai.db`).
 
 ---
 
-## 🧠 Architecture Overview
-
-### High-Level Workflow Orchestration
-
-The pipeline is orchestrated as a **Directed Acyclic Graph (DAG)** using LangGraph, enabling dynamic execution paths, robust fallback mechanisms, and structured generation.
+## 🧠 System Architecture & Execution DAG
 
 ```mermaid
 flowchart TD
-    %% Styling
-    classDef userNode fill:#e1f5fe,stroke:#039be5,stroke-width:2px,color:#01579b
-    classDef aiNode fill:#f3e5f5,stroke:#8e24aa,stroke-width:2px,color:#4a148c
-    classDef dataNode fill:#e8f5e9,stroke:#43a047,stroke-width:2px,color:#1b5e20
-    classDef decision fill:#fff3e0,stroke:#fb8c00,stroke-width:2px,color:#e65100
-
-    U([👤 User Query]):::userNode -->|Submits Query| DC[🔍 Domain Classifier Node]:::aiNode
-    DC -->|Non-Law Query| DIR[⚡ Direct LLM Response]:::aiNode
-    DC -->|Law Query| QR[✏️ Query Refinement Node]:::aiNode
+    U(["👤 Citizen / Legal Query"]) --> DC["🔍 Domain Classifier Node"]
+    DC -->|Non-Law Query| GL["💬 General LLM Node"] --> FIN(["🏁 Final System Output"])
+    DC -->|Indian Law Query| QR["✏️ Query Refinement (Statutory Mapping)"]
     
-    QR -->|Contextualized Query| RC[⚠️ Risk Classifier Node]:::aiNode
-    RC -->|Assigns Risk: Low/Med/High| RAG{📚 RAG Engine<br>Score >= Threshold?}:::decision
+    QR --> RC["⚠️ Risk Classifier (Low / Medium / High)"]
+    RC --> RAG{"📚 Pinecone Vector Search<br>Confidence Score >= 0.50?"}
     
-    RAG -->|Yes: High Confidence| VD[(Pinecone Vector DB)]:::dataNode
-    VD -->|Returns Top-k Docs| CM[🧩 Context Merge Node]:::aiNode
+    RAG -->|Yes: High Confidence| RM["🗺️ Procedural Action Roadmap"]
+    RM --> LE["⚖️ Legal Expert Synthesis (Groq/Llama 3)"] --> FIN
     
-    RAG -->|No: Low Confidence| SERP[🌐 SerpAPI Fallback]:::aiNode
-    SERP -->|Fetches Live Web Data| CM
-    
-    CM -->|Aggregated Context + Risk| LLM[🤖 Legal Expert LLM - Groq]:::aiNode
-    
-    LLM -->|Synthesizes| OUT[📋 Structured Output Generation]:::aiNode
-    DIR -->|Standard Answer| RES([💬 System Response]):::userNode
-    OUT -->|Answer, Roadmap, Lawyer Flag| RES
+    RAG -->|No: Low Confidence / Key Missing / Offline| FB["⚡ Indian Law Fallback Engine (Qwen 2.5 / HF)"]
+    FB --> TTS["🔊 Alibaba Qwen3-TTS 1.7B Voice Synthesis"]
+    TTS --> FIN
 ```
 
 ---
 
-## 🧩 Core Components
+## 📋 Detailed Implementation Plan & Roadmap
 
-### 1. 🔍 Domain Classifier
-- Determines if a query is **law-related** or **general**
-- Legal queries proceed through the full pipeline
-- Non-legal queries get a direct LLM response for efficiency
+The development of LexAI is structured across **seven comprehensive implementation phases**, adhering to strict modular engineering, safety guardrails, and automated verification:
 
-### 2. ✏️ Query Refiner
-- Transforms raw user input into a **structured legal query**
-- Adds jurisdiction context (Indian Law)
-- Improves retrieval precision
+### Phase 1: Requirement Analysis & Architectural Blueprint
+- **1.1 Statutory Scope Definition**: Mapped target legal domains (Tenancy, Criminal Defense, Cybercrime, Constitutional Writs, Family Disputes, Consumer Redressal).
+- **1.2 Legal Transition Mapping**: Built the cross-reference mapping between colonial statutes (IPC, CrPC, Evidence Act) and the new 2024 enactments (BNS, BNSS, BSA).
+- **1.3 LangGraph State Graph Design**: Defined `GraphState` TypedDict to encapsulate query tokens, cluster IDs, confidence scores, risk categories, and response metadata.
 
-### 3. ⚠️ Risk Classifier
-- Categorizes the legal scenario as:
-  - 🟢 **Low** — Informational, no immediate legal threat
-  - 🟡 **Medium** — Procedural concern, may require legal advice
-  - 🔴 **High** — Urgent, rights at risk, lawyer strongly recommended
+### Phase 2: Data Engineering & Cluster-Aware Vector Indexing
+- **2.1 Document Ingestion**: Processed Indian statutory legal texts, landmark Supreme Court rulings, and model draft notices via `PyPDF`.
+- **2.2 Semantic Chunking**: Implemented recursive chunking with 800-character segments and 150-character overlap preserving statutory sections.
+- **2.3 Vector Embedding**: Embedded chunks using `sentence-transformers/all-MiniLM-L6-v2` into 384-dimensional dense vectors.
+- **2.4 KMeans Clustering**: Partitioned vector space into 20 distinct clusters (`NUM_CLUSTERS = 20`) to enable 2-stage cluster-gated search in Pinecone.
 
-### 4. 📚 RAG Engine
-- Performs **cluster-aware semantic search** over Pinecone
-- Returns top-k relevant legal document chunks
-- Threshold-based confidence gating — only uses RAG if score is high enough
+### Phase 3: Multi-Stage Reasoning Pipeline
+- **3.1 Domain Classifier Node**: Fast keyword and semantic filtering to distinguish legal inquiries from general conversations.
+- **3.2 Query Refinement Node**: Translates colloquial citizen grievances into legally precise search queries citing governing Indian Acts.
+- **3.3 Risk Assessment Node**: Evaluates urgency and personal liberty impact (e.g., imminent arrest threats, eviction cutoffs) and classifies risk as `LOW`, `MEDIUM`, or `HIGH`.
+- **3.4 Structured Output Synthesis**: Enforces strict markdown sectioning (`Disclaimer`, `Lawyer Needed`, `Legal Summary`, `Relevant Laws`, `Action Roadmap`, `Important Rights`, `Final Note`).
 
-### 5. 🌐 SerpAPI Fallback
-- Activates when RAG similarity score is below threshold
-- Fetches live, up-to-date legal information from the web
-- Provides real-world context for niche or recent legal issues
+### Phase 4: Calibrated Confidence Routing & Qwen 2.5 Fallback
+- **4.1 Retrieval Confidence Scoring**: Calibrated cosine similarity score into a normalized $[0.0, 1.0]$ confidence index.
+- **4.2 Gated Routing Logic**:
+  $$\text{If } (\text{Score} < 0.50) \lor (\text{Status} \in \{\text{key\_missing}, \text{connection\_error}, \text{no\_docs}\}) \implies \text{Trigger Fallback}$$
+- **4.3 Multi-Tier Fallback Hierarchy**:
+  1. *Tier 1*: **OpenRouter Qwen 2.5** (`qwen/qwen-2.5-72b-instruct` / `32b` / `7b:free`) — Top open-weight model for legal reasoning and statutory precision.
+  2. *Tier 2*: **Hugging Face Inference API** (`law-ai/InLegalBERT` or custom models).
+  3. *Tier 3*: **Groq Qwen** (`qwen/qwen3.8-27b`) ultra-fast fallback.
+  4. *Tier 4*: **Safe Grounded Synthesis** — Offline emergency fallback guaranteeing zero application crashes.
+- **4.4 Telemetry Tracking**: Automatically records `answer_source`, `confidence_score`, `fallback_reason`, `retrieved_documents_count`, and `response_status`.
 
-### 6. 🤖 Legal Expert LLM (Groq)
-- Final synthesis node powered by **Groq's ultra-fast LLM inference**
-- Receives merged context (RAG + SERP) + risk classification
-- Generates a 4-part structured response
+### Phase 5: Voice Accessibility Engine (Alibaba Qwen3-TTS 1.7B)
+- **5.1 TTS Architecture**: Integrated Alibaba Qwen3-TTS 1.7B parameter multilingual speech generation model (`core/tts.py`).
+- **5.2 Dual-Tier Voice Delivery**:
+  - *Cloud Synthesis*: Posts to Hugging Face / OpenRouter audio endpoint for neural waveform generation.
+  - *Browser Web Speech Synthesis*: Instant zero-latency client-side speech playback across desktop and mobile browsers.
+- **5.3 Disk Caching**: Caches synthesized audio in `data/audio_cache/` using MD5 query hashing to prevent redundant API latency.
+- **5.4 Smart Guardrail**: Prevents runtime type errors if a user specifies a TTS model as their text LLM by automatically delegating text to Qwen 2.5 Instruct while reserving Qwen3-TTS for audio playback.
 
-### 7. 🗺️ Roadmap Generator *(within LLM node)*
-- Produces numbered, actionable steps tailored to the user's legal situation
-- Guides users through evidence collection, filing procedures, and escalation
+### Phase 6: Streamlit UI & Glassmorphism Dashboard Rebuild
+- **6.1 Design System**: Built a modern dark glassmorphic UI using custom CSS (`ui/styles.css`) with smooth hover micro-interactions, glowing metric cards, and responsive grids.
+- **6.2 Dashboard & KPI Analytics**: Real-time telemetry cards showing Total Consultations, High Risk Alerts, Knowledge Base Size, and Database Footprint.
+- **6.3 BNS ⇄ IPC Matrix Page**: Interactive lookup matrix for statutory conversions under the 2024 overhaul.
+- **6.4 Legal Draft Studio**: Automated document drafter for Legal Notices, RTI Applications, Tenant Deposit Demands, and Consumer Complaints.
+- **6.5 Document Analyzer**: Upload PDF/TXT agreements for automated clause risk analysis and red-flag detection.
 
----
-
-## 🗄️ Data Flow Architecture (DFD)
-
-### Level 0 Context & Level 1 System Flow
-The data engineering pipeline incorporates Indian legal text vectorization, dynamic context resolution, and intelligent fallback fetching.
-
-```mermaid
-flowchart TD
-    %% Styling
-    classDef userNode fill:#e1f5fe,stroke:#039be5,stroke-width:2px,color:#01579b
-    classDef processNode fill:#e0f7fa,stroke:#00acc1,stroke-width:2px,color:#006064
-    classDef dataStore fill:#e8f5e9,stroke:#43a047,stroke-width:2px,color:#1b5e20
-    classDef external fill:#fce4ec,stroke:#d81b60,stroke-width:2px,color:#880e4f
-
-    U([User]):::userNode -->|1. Raw Input| P1((Process 1:<br>Domain & Risk Analysis)):::processNode
-    P1 -->|2. Refined Query & Risk Tag| P2((Process 2:<br>Context Retrieval)):::processNode
-    
-    %% Ingestion Pipeline (side process)
-    subgraph Offline Ingestion
-        RAW[Legal PDFs] -->|PyPDF + Splitter| EMB[SentenceTransformers]
-        EMB -->|KMeans Clustering| UP[Upsert Job]
-    end
-    UP -.->|Vectors + Cluster IDs| DS1
-    
-    P2 <-->|3. Vector Search & Similarity Match| DS1[(Data Store 1:<br>Pinecone Legal Vectors)]:::dataStore
-    P2 <-->|4. Live HTTP Search| EX1[External API:<br>SerpAPI]:::external
-    
-    P2 -->|5. Retrieved Context Sources| P3((Process 3:<br>Context Merging)):::processNode
-    P3 -->|6. Unified Context Payload| P4((Process 4:<br>Response Generation)):::processNode
-    
-    P4 <-->|7. Prompt Synthesis| EX2[External API:<br>Groq LLM]:::external
-    P4 -->|8. Structured Markdown Guidance| U
-```
----
-
-## 🔍 Retrieval Strategy
-
-### Semantic Search
-- Uses `sentence-transformers` to embed the refined user query
-- Computes cosine similarity against stored Pinecone vectors
-- Returns `top-k` most relevant legal chunks
-
-### Cluster-Based Retrieval
-- Documents are pre-clustered using **KMeans** during ingestion
-- Cluster IDs stored as metadata in Pinecone
-- Enables **namespace/cluster-filtered** retrieval for precision:
-  - Query is assigned to its nearest cluster
-  - Retrieval is scoped to that cluster for higher relevance
+### Phase 7: Security, Testing, Data Sovereignty & Deployment
+- **7.1 Secret Scanning & Git Protection**: Clean separation of sensitive API credentials into local `.env` (git-ignored) with sanitized `.env.example`.
+- **7.2 Automated Verification Suite**: Built `verify_app.py` testing database operations, fallback routing, prompt formatting, and exports.
+- **7.3 Production Deployment**: Git remote setup and automated push tracking on GitHub `main` branch.
 
 ---
 
-## 🧠 AI Features
+## 🧩 Core Modules & Pipeline Components
 
-| Feature | Description |
-|---|---|
-| **Legal Reasoning** | Contextual, multi-step legal analysis using Groq LLM |
-| **Risk Detection** | Severity classification based on query semantics |
-| **Hybrid Retrieval** | RAG + live web search for maximum coverage |
-| **Context-Aware Answers** | Merged context ensures grounded, factual responses |
-| **Structured Output** | Consistent format: answer + roadmap + lawyer flag + disclaimer |
-| **Query Refinement** | LLM pre-processes raw queries for better retrieval accuracy |
-
----
-
-## ⚡ Tech Stack
-
-| Layer | Technology |
-|---|---|
-| **Workflow Orchestration** | LangGraph |
-| **LLM Inference** | Groq (Llama 3 / Mixtral) |
-| **Embeddings** | SentenceTransformers (`all-MiniLM-L6-v2`) |
-| **Vector Database** | Pinecone |
-| **Clustering** | Scikit-learn (KMeans) |
-| **Web Search Fallback** | SerpAPI |
-| **Document Loader** | PyPDF (LangChain) |
-| **LangChain Modules** | langchain, langchain-community, langchain-groq, langchain-huggingface |
-| **Environment Management** | python-dotenv |
-| **Notebook Runtime** | Jupyter / IPython |
-| **Language** | Python 3.10+ |
+| Module | File | Responsibility |
+| :--- | :--- | :--- |
+| **App Entry Point** | `app.py` | Master Streamlit dashboard, navigation, and session state manager. |
+| **Pipeline DAG** | `core/pipeline.py` | LangGraph workflow DAG and interactive step generator `run_query()`. |
+| **Vector RAG** | `core/rag.py` | Pinecone 2-stage cluster search and calibrated confidence evaluator. |
+| **Indian Law Fallback** | `core/hf_fallback.py` | Multi-tier Qwen 2.5, Hugging Face, and grounded statutory synthesis. |
+| **Voice TTS Engine** | `core/tts.py` | Alibaba Qwen3-TTS 1.7B voice synthesis and audio cache manager. |
+| **Database Client** | `db/database.py` | SQLite persistence for consultations, messages, bookmarks, and checklist progress. |
+| **Dashboard UI** | `ui/dashboard.py` | KPI metric cards, quick-action chips, and system status indicators. |
+| **Analytics Telemetry**| `ui/analytics.py` | Visual telemetry charts for risk distribution, pipeline latency, and feedback. |
+| **UI Components** | `ui/components.py` | Glassmorphic cards, statutory pills, interactive checklist, and SOS drawer. |
+| **Export Engine** | `utils/export.py` | Encoded Markdown and PDF generation using `fpdf2`. |
 
 ---
 
-## 📂 Project Structure
+## ⚡ Confidence-Based Fallback Architecture
+
+| Condition | Metric / Status | Routing Decision | Primary Engine |
+| :--- | :---: | :---: | :---: |
+| **High Document Relevance** | Score $\ge 0.50$ | Verified Knowledge Base RAG | Pinecone + Groq LLM |
+| **Weak Vector Match** | Score $< 0.50$ | Low-Confidence Fallback | OpenRouter / Qwen 2.5 72B |
+| **Unconfigured Pinecone Key**| `key_missing` | Automatic Fallback | Qwen 2.5 / Groq Qwen |
+| **Pinecone Network Failure** | `connection_error` | Automatic Fallback | Offline Grounded Indian Law |
+| **General Non-Legal Inquiry** | Domain = `general` | General Conversational LLM | Fast Direct LLM Response |
+
+---
+
+## 🔊 Voice Engine: Alibaba Qwen3-TTS 1.7B
+
+LexAI incorporates **Alibaba Qwen3-TTS (1.7B Variant)** for voice accessibility:
+- **Model Identifier**: `qwen/qwen3-tts-1.7b` (or `Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice`)
+- **Interactive UI**: Every consultation response includes a **"🔊 Listen to Legal Advice (Qwen3-TTS 1.7B)"** button.
+- **Dual Synthesis**: High-fidelity neural TTS when network API keys are present, with seamless client-side browser speech synthesis as a zero-latency fallback.
+
+---
+
+## 📂 Repository Structure
 
 ```
-law_suggestion/
+indian_law-/
+├── app.py                       # Master Streamlit SaaS application
+├── verify_app.py                # Automated 7-point verification test suite
+├── requirements.txt             # Production dependencies
+├── README.md                    # Platform documentation & implementation plan
+├── PROJECT_OUTPUT_REPORT.md     # Comprehensive project output & test report
+├── PROJECT_OUTPUT_REPORT.html   # Styled printable HTML submission report
+├── .env.example                 # Sanitized configuration template
+├── .gitignore                   # Excludes .env, *.db, audio cache, logs
 │
-├── agent.ipynb              # Main LangGraph pipeline (all nodes + workflow)
-├── requirement.txt          # All Python dependencies
-├── .env                     # API keys (Groq, Pinecone, SerpAPI) — not committed
-├── .gitignore               # Ignores venv, .env, caches
+├── core/                        # Intelligence & Pipeline Engine
+│   ├── config.py                # Configuration loader and threshold settings
+│   ├── pipeline.py              # LangGraph multi-stage DAG & interactive generator
+│   ├── rag.py                   # Pinecone cluster search & confidence scoring
+│   ├── hf_fallback.py           # Qwen 2.5 & Hugging Face Indian law fallback
+│   ├── tts.py                   # Alibaba Qwen3-TTS 1.7B voice synthesis
+│   ├── llm.py                   # Groq & OpenRouter inference handlers
+│   ├── prompts.py               # Indian statutory prompt templates & guidelines
+│   └── search.py                # SerpAPI live web search integration
 │
-└── venv/                    # Python virtual environment (not tracked)
+├── ui/                          # Modern Glassmorphic Frontend
+│   ├── components.py            # Answer cards, status pills, voice player, SOS
+│   ├── dashboard.py             # SaaS overview dashboard & KPI metric cards
+│   ├── analytics.py             # Telemetry visualizations & consultation insights
+│   └── styles.css               # Dark theme CSS styling & micro-animations
+│
+├── db/                          # Local Data Sovereignty
+│   └── database.py              # SQLite client (chats, bookmarks, roadmap progress)
+│
+├── utils/                       # Exporters & Helpers
+│   ├── export.py                # PDF (fpdf2) and Markdown export generators
+│   └── helpers.py               # Input sanitizers and response parsers
+│
+└── data/                        # Local Storage (Git-Ignored)
+    ├── audio_cache/             # Synthesized Qwen3-TTS audio files
+    └── lexai.db                 # Private SQLite consultation database
 ```
 
 ---
 
-## 🔄 End-to-End Execution Flow
+## 🔧 Installation & Setup
 
-1. **User submits a query** (e.g., *"My landlord locked me out. What are my rights?"*)
-2. **Domain Classifier** identifies it as a legal query → proceeds to full pipeline
-3. **Query Refiner** restructures it: *"Tenant rights during illegal eviction under Indian Rent Control Act"*
-4. **Risk Classifier** tags it as 🔴 **High Risk** (rights being actively violated)
-5. **RAG Node** embeds the refined query and searches Pinecone
-   - If similarity score ≥ threshold → uses retrieved legal document chunks
-   - Else → **SerpAPI Fallback** fetches live web results
-6. **Context Merge** combines RAG and SERP results into a single context block
-7. **Legal Expert LLM** (Groq) processes context + risk level and generates:
-   - ✅ Legal Explanation (what the law says)
-   - 🗺️ Action Roadmap (steps to take)
-   - 👨‍⚖️ Lawyer Needed: **Yes** (with justification)
-   - ⚠️ Disclaimer (AI is not a substitute for legal counsel)
-8. **Response returned** to user in structured, readable format
-
----
-
-## 📝 Sample Execution
-
-**Question**: *"What are the rights of women during police investigation?"*
-
-### 🛠️ Agent Execution Logs
-```text
-🔍 Refined Query: "Rights of women during police investigation under Indian Law, Section 160 and 161 of CrPC, and guidelines by High Court of India"
-⚖️ Risk Assessment: LOW
-🎯 Best cluster matched: Cluster 14. Going deeper...
-✅ High confidence (0.64). Moving to Roadmap...
-🗺️ Generating legal roadmap...
-⚖️ Finalizing expert response (Strictly Indian Law)...
-
---- AGENT EXECUTION COMPLETE ---
-```
-
-### ⚖️ Final Expert Response
-
-> **Disclaimer**: The information provided is for general guidance only and should not be considered as legal advice. It is recommended to consult a qualified lawyer for specific and personalized advice.
-> 
-> **Lawyer Requirement**: **Optional** - While a lawyer is not mandatory, it is highly recommended to have one for proper guidance and representation during the police investigation.
-> 
-> **Legal Summary**: In India, women have the right to be treated with dignity and respect during police investigations. The police are required to follow certain procedures to ensure that women are not harassed or intimidated during the investigation process.
-> 
-> **Relevant Laws**: The Indian Penal Code (IPC), 1860, and the Code of Criminal Procedure (CrPC), 1973, are relevant laws that govern the investigation process.
-> 
-> **Step-by-step Action Roadmap**:
-> 1. If a woman wants to file a complaint, she can approach the police station and provide a written complaint.
-> 2. The police are required to register a First Information Report (FIR) under Section 154 of the CrPC.
-> 3. The police will then conduct an investigation, during which they may ask questions and collect evidence.
-> 4. The woman has the right to have a lawyer present during the investigation.
-> 5. The police are required to provide a copy of the FIR to the woman and keep her informed about the progress of the investigation.
-> 
-> **Important Rights / Notes**:
-> - The right to dignity and respect during the investigation process.
-> - The right to have a lawyer present during the investigation.
-> - The right to receive a copy of the FIR.
-> - The right to be kept informed about the progress of the investigation.
-> - The police are required to provide assistance to the woman if she chooses to file a complaint under the Indian Penal Code or any other law.
-> 
-> **Final Note**: It is essential to remember that the police investigation process should be fair, impartial, and respectful. If a woman feels that her rights are being violated or that she is being harassed during the investigation, she should immediately seek help from a lawyer or a women's rights organization.
-
----
-
-## 🛡️ Safety & Guardrails
-
-### Legal Disclaimer
-Every response includes a mandatory disclaimer:
-> *"This response is generated by an AI system and is for informational purposes only. It does not constitute legal advice. Please consult a qualified legal professional for your specific situation."*
-
-### Risk-Based Escalation
-- **High Risk** → Always recommends consulting a lawyer
-- **Medium Risk** → Recommends optional legal consultation
-- **Low Risk** → Self-service guidance provided
-
-### RAG Confidence Gating
-- Responses are only sourced from RAG if retrieval score exceeds a defined threshold
-- Below threshold: falls back to SerpAPI, preventing hallucinated legal answers
-
----
-
-## 🔧 Setup & Installation
-
+### 1. Clone the Repository
 ```bash
-# 1. Clone the repository
-git clone https://github.com/amankumar5345/Law-Chat-Bot.git
-cd Law-Chat-Bot
+git clone https://github.com/himanshu9330/indian_law-.git
+cd indian_law-
+```
 
-# 2. Create and activate virtual environment
+### 2. Set Up Virtual Environment
+```bash
 python -m venv venv
-venv\Scripts\activate        # Windows
-source venv/bin/activate     # macOS/Linux
+# On Windows:
+venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
+```
 
-# 3. Install dependencies
+### 3. Install Dependencies
+```bash
 pip install -r requirements.txt
+```
 
-# 4. Configure environment variables
-# Create a .env file with the following:
-GROQ_API_KEY=your_groq_api_key
-PINECONE_API_KEY=your_pinecone_api_key
-SERPAPI_API_KEY=your_serpapi_key
+### 4. Configure Environment Variables
+Copy `.env.example` to `.env` and configure your credentials:
+```bash
+cp .env.example .env
+```
 
-# 5. Launch the Streamlit application or Jupyter Notebook
+```dotenv
+# === Core Primary Keys ===
+GROQ_API_KEY=your_groq_api_key_here
+PINECONE_API_KEY=your_pinecone_api_key_here
+SERPAPI_API_KEY=your_serpapi_api_key_here
+
+# === OpenRouter Qwen Indian Law Reasoning ===
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+OPENROUTER_MODEL=qwen/qwen-2.5-72b-instruct
+
+# === Alibaba Qwen3-TTS Voice Engine ===
+QWEN_TTS_MODEL=qwen/qwen3-tts-1.7b
+ENABLE_TTS=true
+
+# === Pipeline Confidence Thresholds ===
+RAG_CONFIDENCE_THRESHOLD=0.5
+RAG_TOP_K=3
+```
+
+### 5. Launch the Application
+```bash
 streamlit run app.py
-# or: jupyter notebook agent.ipynb
+```
+Open **[http://localhost:8501](http://localhost:8501)** in your browser.
+
+---
+
+## 🧪 Verification & Test Results
+
+Run the automated test suite to verify pipeline integrity, fallback routing, and database operations:
+```bash
+python verify_app.py
+```
+
+### Expected Output:
+```text
+======================================================================
+LexAI Automated Verification Suite
+======================================================================
+1. All modules (including hf_fallback and tts) imported successfully.
+2. Database created with tables: ['users', 'chats', 'messages', 'feedback', 'bookmarks', 'roadmap_progress']
+3. Stored and fetched test consultation messages.
+4. Qwen3-TTS Voice Component verified successfully.
+5. Fallback Engine generated response via 'openrouter/qwen-2.5-72b-instruct'.
+6. Markdown export generated (772 bytes).
+7. PDF export generated (40 bytes).
+
+ALL TESTS PASSED! LexAI backend, Qwen fallback, and Qwen3-TTS are fully operational.
+Exit Code: 0 (OK)
 ```
 
 ---
 
-## 🚀 Future Improvements
+## 👨‍💻 Author & Contributions
 
-| Feature | Description |
-|---|---|
-| 🌐 **Multi-language Support** | Hindi, Tamil, Bengali legal queries via translation layer |
-| 📜 **Larger Legal Corpus** | Include IPC, CrPC, Constitution, Consumer Protection Act |
-| 🔄 **Real-time Legal Updates** | Automated ingestion of new judgements and amendments |
-| 🖥️ **Web UI** | Streamlit or Next.js frontend for end-user interaction |
-| 📊 **Analytics Dashboard** | Query trends, risk distribution, common legal domains |
-| 🔐 **User Authentication** | Secure sessions and query history |
-| 🧪 **Evaluation Framework** | RAGAS-based RAG evaluation and LLM output scoring |
-| 📱 **Mobile App** | React Native app for on-the-go legal assistance |
-
----
-
-## 👨‍💻 Author
-
-**Aman** — AI/ML Developer
-- GitHub: [@amankumar5345](https://github.com/amankumar5345)
+**Himanshu**  
+- GitHub: [@himanshu9330](https://github.com/himanshu9330)  
+- Email: [himanshugupta9330@email.com](mailto:himanshugupta9330@email.com)  
+- Project Repository: [https://github.com/himanshu9330/indian_law-](https://github.com/himanshu9330/indian_law-)
 
 ---
 
@@ -334,4 +296,4 @@ This project is licensed under the **MIT License** — see the [LICENSE](LICENSE
 
 ---
 
-> ⚠️ **Disclaimer**: LexAI is an AI-powered tool for informational purposes only. It does not constitute legal advice. Always consult a qualified legal professional for matters affecting your rights.
+> ⚠️ **Legal Disclaimer**: LexAI is an artificial intelligence platform designed for legal awareness, procedural education, and statutory research under Indian Law. It does not constitute formal legal representation or an attorney-client relationship under the Advocates Act, 1961. Always consult an enrolled advocate for formal judicial filings.
