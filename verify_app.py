@@ -20,9 +20,7 @@ import core.hf_fallback
 import core.tts
 import utils.helpers
 import utils.export
-import ui.components
-import ui.analytics
-import ui.dashboard
+import core.services
 
 print("1. All modules (including hf_fallback and tts) imported successfully.")
 
