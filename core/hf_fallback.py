@@ -182,6 +182,9 @@ def _call_huggingface_api(
 
 def _call_groq_fallback(prompt: str, system_prompt: str) -> Optional[str]:
     """Call Groq Qwen as alternative high-speed fallback."""
+    clean_groq = (os.getenv("GROQ_API_KEY") or GROQ_API_KEY or "").strip().strip("\"' ")
+    if not clean_groq or clean_groq in ("", "your_groq_api_key_here"):
+        return None
     from core.llm import call_llm
     try:
         res = call_llm(
@@ -189,8 +192,9 @@ def _call_groq_fallback(prompt: str, system_prompt: str) -> Optional[str]:
             system_prompt=system_prompt,
             temperature=0.2,
             model="qwen/qwen3.8-27b",
+            api_key=clean_groq,
         )
-        if res and len(res.strip()) > 50:
+        if res and len(res.strip()) > 50 and "Demo Mode" not in res and "configured" not in res and "Error" not in res:
             return res
     except Exception as e:
         logger.warning("Groq Qwen fallback failed: %s", e)

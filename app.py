@@ -398,7 +398,12 @@ def render_chat_page() -> None:
 
         # Auto-title on first message
         if len(messages) == 0:
-            auto_title = generate_chat_title(cleaned_prompt, api_key=st.session_state.get("groq_key"))
+            auto_title = generate_chat_title(
+                cleaned_prompt,
+                api_key=st.session_state.get("groq_key"),
+                openrouter_api_key=st.session_state.get("openrouter_key"),
+                openrouter_model=st.session_state.get("openrouter_model"),
+            )
             db.update_chat_title(current_cid, auto_title)
 
         # 2. Run Multi-Stage Pipeline DAG

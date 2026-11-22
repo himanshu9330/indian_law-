@@ -104,6 +104,11 @@ LAW_KEYWORDS: list[str] = [
     "salary", "wages", "employer", "employee", "termination", "workplace",
     # Consumer
     "consumer", "refund", "complaint", "product", "service",
+    # Procedural & Evidence (Crucial for follow-up inquiries)
+    "document", "documents", "evidence", "proof", "fee", "fees", "cost", "costs",
+    "limitation", "deadline", "period", "procedure", "process", "step", "steps",
+    "action", "notice", "claim", "sue", "relief", "remedy", "section", "act",
+    "clause", "statute", "tribunal", "jurisdiction", "appeal", "file", "filing",
 ]
 
 # ── Suggested questions (by category) ────────────────────────────────────

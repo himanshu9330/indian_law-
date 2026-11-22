@@ -83,7 +83,19 @@ class GraphState(TypedDict):
 def domain_classifier_node(state: GraphState) -> GraphState:
     """Classifies if query is law-related or general."""
     query = state["query"].lower()
-    domain = "law" if any(k in query for k in LAW_KEYWORDS) else "general"
+    is_legal = any(k in query for k in LAW_KEYWORDS)
+    if not is_legal:
+        procedural_tokens = [
+            "document", "documents", "evidence", "proof", "fee", "fees", "cost", "costs",
+            "limitation", "period", "deadline", "procedure", "process", "step", "steps",
+            "action", "notice", "complaint", "file", "filing", "claim", "sue", "remedy",
+            "relief", "section", "act", "clause", "provision", "jurisdiction", "rights",
+            "what should i do", "what can i do", "how to proceed", "next step",
+            "police", "court", "lawyer", "advocate", "appeal", "statute", "tribunal"
+        ]
+        if any(pt in query for pt in procedural_tokens):
+            is_legal = True
+    domain = "law" if is_legal else "general"
     return {**state, "domain": domain}
 
 
@@ -94,16 +106,24 @@ def domain_router(state: GraphState) -> str:
 def general_llm_node(state: GraphState) -> GraphState:
     """Direct LLM response for non-law queries."""
     prompt = GENERAL_RESPONSE.format(query=state["query"])
-    answer = call_llm(prompt, api_key=state.get("groq_api_key"))
+    answer = call_llm(
+        prompt,
+        api_key=state.get("groq_api_key"),
+        openrouter_api_key=state.get("openrouter_api_key"),
+        openrouter_model=state.get("openrouter_model"),
+    )
+    if not answer or "Demo Mode" in answer or "Groq API key is not configured" in answer:
+        answer = f"I am your Indian Legal Assistant (powered by Qwen). For your inquiry regarding '{state['query']}': Please feel free to ask any question regarding Indian criminal or civil law, procedures, or citizen rights."
+
     return {
         **state,
         "final_answer": answer,
         "source": "GENERAL",
         "structured_sections": {
             "legal_summary": answer,
-            "disclaimer": "This is a general inquiry response, not legal information.",
+            "disclaimer": "This is a general inquiry response, not formal legal advice.",
             "lawyer_needed": "Not Needed",
-            "lawyer_reason": "Non-legal matter.",
+            "lawyer_reason": "General question.",
             "relevant_laws": [],
             "action_roadmap": [],
             "important_rights": [],
@@ -120,6 +140,8 @@ def refine_query_node(state: GraphState) -> GraphState:
         system_prompt="You are an Indian Legal Research Expert. Output only the refined query string.",
         temperature=0.2,
         api_key=state.get("groq_api_key"),
+        openrouter_api_key=state.get("openrouter_api_key"),
+        openrouter_model=state.get("openrouter_model"),
     )
     # Fallback to original query if LLM fails or repeats preamble
     refined = refined.strip().strip('"\'')
@@ -136,6 +158,8 @@ def risk_classifier_node(state: GraphState) -> GraphState:
         system_prompt="You are a Legal Risk Assessment Expert.",
         temperature=0.2,
         api_key=state.get("groq_api_key"),
+        openrouter_api_key=state.get("openrouter_api_key"),
+        openrouter_model=state.get("openrouter_model"),
     )
     level, reason = parse_risk_response(raw_response)
     return {**state, "risk": level, "risk_reason": reason}
@@ -250,6 +274,8 @@ def roadmap_node(state: GraphState) -> GraphState:
         system_prompt="You are a legal procedure advisor for Indian citizens.",
         temperature=0.3,
         api_key=state.get("groq_api_key"),
+        openrouter_api_key=state.get("openrouter_api_key"),
+        openrouter_model=state.get("openrouter_model"),
     )
     return {**state, "roadmap": roadmap}
 
@@ -276,6 +302,8 @@ def legal_expert_node(state: GraphState) -> GraphState:
         system_prompt="You are a STRICT Indian legal assistant. Follow the exact section headers requested.",
         temperature=0.3,
         api_key=state.get("groq_api_key"),
+        openrouter_api_key=state.get("openrouter_api_key"),
+        openrouter_model=state.get("openrouter_model"),
     )
 
     structured = parse_structured_answer(final_answer)
@@ -422,6 +450,8 @@ def run_query(
             query=query,
             summary=state["final_answer"],
             api_key=groq_api_key,
+            openrouter_api_key=openrouter_api_key,
+            openrouter_model=openrouter_model,
         )
 
         total_time = round(time.time() - start_time, 2)
@@ -582,6 +612,8 @@ def run_query(
         query=query,
         summary=summary_text,
         api_key=groq_api_key,
+        openrouter_api_key=openrouter_api_key,
+        openrouter_model=openrouter_model,
     )
 
     total_time = round(time.time() - start_time, 2)
