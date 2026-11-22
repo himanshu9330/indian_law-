@@ -292,12 +292,12 @@ def render_chat_page() -> None:
     chat_title = chat_info.get("title", "Legal Consultation") if chat_info else "Legal Consultation"
 
     # Executive Top Navbar Bar
-    top_col1, top_col2, top_col3, top_col4 = st.columns([0.48, 0.20, 0.16, 0.16])
+    top_col1, top_col2, top_col3, top_col4 = st.columns([0.46, 0.22, 0.16, 0.16], vertical_alignment="center")
     with top_col1:
         st.markdown(
             f"""
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                <span style="font-size: 1.35rem; font-weight: 900; color: #ffffff;">⚖️ {chat_title}</span>
+            <div style="display: flex; align-items: center; gap: 10px; margin: 0;">
+                <span style="font-size: 1.25rem; font-weight: 900; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">⚖️ {chat_title}</span>
                 <span class="live-status-pill"><span class="radar-dot"></span> LIVE DAG</span>
             </div>
             """,

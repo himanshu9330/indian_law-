@@ -324,7 +324,7 @@ def render_structured_answer(
     final_note = sections.get("final_note", "")
     disclaimer = sections.get("disclaimer", "Information is for general guidance only under Indian law.")
 
-    # 1. Top Segmented Meta Panel
+    # 1. Top Segmented Meta Panel (Compact Horizontal Status Bar)
     conf_pct = int((confidence if confidence is not None else 0.75) * 100)
 
     if source in ("huggingface_fallback", "openrouter_qwen") or meta.get("fallback_reason"):
@@ -336,17 +336,16 @@ def render_structured_answer(
 
     st.markdown(
         f"""
-        <div class="answer-box-card">
-            <div class="answer-accent-top"></div>
-            <div class="answer-status-pill-row">
-                <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
-                    <span class="risk-halo-pill {risk}">
-                        {risk_emoji(risk)} {risk.upper()} RISK • {risk_description(risk)}
-                    </span>
-                    <span class="source-halo-pill">
-                        {source_label}
-                    </span>
-                </div>
+        <div class="response-status-bar">
+            <div class="response-status-left">
+                <span class="risk-halo-pill {risk}">
+                    {risk_emoji(risk)} {risk.upper()} RISK
+                </span>
+                <span class="source-halo-pill">
+                    {source_label}
+                </span>
+            </div>
+            <div class="response-status-right">
                 <div class="confidence-fill-box">
                     <span>Similarity: <b>{conf_pct}%</b></span>
                     <div class="confidence-rail">
@@ -359,16 +358,16 @@ def render_structured_answer(
         unsafe_allow_html=True,
     )
 
-    # 2. Lawyer Advisory Banner
+    # 2. Compact Advocate Consultation Advisory
     lawyer_cls = lawyer_needed.lower().replace(" ", "-")
     lawyer_icon = "🚨" if ("require" in lawyer_cls or "yes" in lawyer_cls) else ("⚖️" if "optional" in lawyer_cls else "✅")
     st.markdown(
         f"""
         <div class="premium-lawyer-banner {lawyer_cls}">
             <div class="lawyer-badge-large-icon">{lawyer_icon}</div>
-            <div>
-                <div class="lawyer-banner-main">Advocate Consultation: {lawyer_needed}</div>
-                <div class="lawyer-banner-sub">{lawyer_reason or 'Formal legal consultation is advised before executing statutory filings.'}</div>
+            <div class="lawyer-banner-content">
+                <span class="lawyer-banner-main">Advocate Consultation: <b>{lawyer_needed}</b></span>
+                <span class="lawyer-banner-sub">— {lawyer_reason or 'Formal legal consultation is advised before executing statutory filings.'}</span>
             </div>
         </div>
         """,
