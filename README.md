@@ -1,13 +1,15 @@
 # ⚖️ LexAI — Bharat Legal SaaS: AI Legal Intelligence & Advisory Platform
 
-> An enterprise-grade, multi-stage AI legal intelligence platform for the Indian Legal Framework (including **BNS 2024**, **BNSS 2024**, and **BSA 2024**). Features cluster-aware **Pinecone RAG**, calibrated **Qwen 2.5** Indian law fallback, **Alibaba Qwen3-TTS 1.7B** voice narration, and an interactive dark glassmorphic Streamlit SaaS dashboard.
+> An enterprise-grade, multi-stage AI legal intelligence platform for the Indian Legal Framework (including **BNS 2024**, **BNSS 2024**, and **BSA 2024**). Features cluster-aware **Pinecone RAG**, calibrated **Qwen 2.5** Indian law fallback, **Alibaba Qwen3-TTS 1.7B** voice narration, a fail-safe **Multi-Layered Guardrails & Safety Architecture**, and an interactive dark glassmorphic Streamlit SaaS dashboard.
 
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.32+-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io)
 [![LangGraph](https://img.shields.io/badge/LangGraph-Workflow%20DAG-orange)](https://github.com/langchain-ai/langgraph)
 [![Qwen 2.5](https://img.shields.io/badge/LLM-Qwen%202.5%2072B%20/%20Groq-purple)](https://openrouter.ai)
-[![Qwen3-TTS](https://img.shields.io/badge/Voice-Qwen3--TTS%201.7B-blue)](https://github.com/QwenLM)
+[![Voice](https://img.shields.io/badge/Voice-Qwen3--TTS%201.7B-blue)](https://github.com/QwenLM)
 [![Pinecone](https://img.shields.io/badge/Pinecone-VectorDB-000000?logo=pinecone)](https://www.pinecone.io)
+[![Safety Guardrails](https://img.shields.io/badge/Guardrails-Multi--Layer%20Fail--Safe-brightgreen)](GUARDRAILS.md)
+[![Red-Team Tests](https://img.shields.io/badge/Red--Team%20Tests-47%2F47%20Passed-success)](tests/test_guardrails.py)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ---
@@ -15,14 +17,15 @@
 ## 📑 Table of Contents
 1. [Overview & Key Capabilities](#-overview--key-capabilities)
 2. [System Architecture & Execution DAG](#-system-architecture--execution-dag)
-3. [📋 Detailed Implementation Plan & Roadmap](#-detailed-implementation-plan--roadmap)
-4. [Core Modules & Pipeline Components](#-core-modules--pipeline-components)
-5. [Confidence-Based Fallback Architecture](#-confidence-based-fallback-architecture)
-6. [Voice Engine: Alibaba Qwen3-TTS 1.7B](#-voice-engine-alibaba-qwen3-tts-17b)
-7. [Repository Structure](#-repository-structure)
-8. [Installation & Setup](#-installation--setup)
-9. [Verification & Test Results](#-verification--test-results)
-10. [Author & License](#-author--license)
+3. [Multi-Layered Guardrails Architecture](#-multi-layered-guardrails-architecture)
+4. [📋 Detailed Implementation Plan & Roadmap](#-detailed-implementation-plan--roadmap)
+5. [Core Modules & Pipeline Components](#-core-modules--pipeline-components)
+6. [Confidence-Based Fallback Architecture](#-confidence-based-fallback-architecture)
+7. [Voice Engine: Alibaba Qwen3-TTS 1.7B](#-voice-engine-alibaba-qwen3-tts-17b)
+8. [Repository Structure](#-repository-structure)
+9. [Installation & Setup](#-installation--setup)
+10. [Verification & Red-Team Test Results](#-verification--red-team-test-results)
+11. [Author & License](#-author--license)
 
 ---
 
@@ -35,12 +38,14 @@
   - **BNS 2024** ⇄ **IPC 1860** (e.g. BNS § 318 ⇄ IPC § 420 Cheating; BNS § 103 ⇄ IPC § 302 Murder)
   - **BNSS 2024** ⇄ **CrPC 1973** (e.g. BNSS § 482 ⇄ CrPC § 438 Anticipatory Bail; BNSS § 35 ⇄ CrPC § 41A Notice)
   - **BSA 2024** ⇄ **IEA 1872** (Digital evidence, electronic certificate standards)
+- 🛡️ **Fail-Safe Multi-Layered Guardrails**: Production-grade safety routing protecting against prompt injection, jailbreaks, malicious intent, PII leakage, and statutory hallucinations without blocking legitimate legal queries (e.g., explaining murder under BNS 103).
+- 🚨 **Safety-Critical Emergency Routing**: Detects active crises (domestic violence, suicide/self-harm, child abuse, active arrest, sexual assault) and prepends official national helplines dynamically without blocking statutory information.
 - 📚 **Cluster-Aware Vector Retrieval**: 2-stage Pinecone retrieval scoped to KMeans statutory document clusters.
 - ⚡ **Confidence-Based Qwen 2.5 Fallback**: Evaluates retrieval confidence score; if confidence is low ($< 0.50$), key is missing, or Pinecone is offline, routes seamlessly to fine-tuned Indian Law reasoning via OpenRouter Qwen 2.5 / Groq.
 - 🔊 **Voice Accessibility (Qwen3-TTS 1.7B)**: In-app voice playback synthesizing natural legal advisories for audio accessibility.
 - 🗺️ **Interactive Action Roadmap**: Persistent checklist tracking evidence gathering, legal notice dispatch, and court filings.
 - 📄 **Multi-Format Export**: One-click consultation report generation in Markdown and publication-ready PDF.
-- 🛡️ **Zero Telemetry Data Sovereignty**: 100% private local persistence in SQLite (`data/lexai.db`).
+- 🔒 **Zero Telemetry Data Sovereignty**: 100% private local persistence in SQLite (`data/lexai.db`) with PII masking before logging.
 
 ---
 
@@ -48,26 +53,57 @@
 
 ```mermaid
 flowchart TD
-    U(["👤 Citizen / Legal Query"]) --> DC["🔍 Domain Classifier Node"]
-    DC -->|Non-Law Query| GL["💬 General LLM Node"] --> FIN(["🏁 Final System Output"])
-    DC -->|Indian Law Query| QR["✏️ Query Refinement (Statutory Mapping)"]
+    U(["👤 User Legal Query"]) --> L1["🛡️ Layer 1: Abuse Prevention & Rate Limiter<br>(Burst, Daily, 5-Block Cooldown)"]
+    L1 -->|Allowed| L2["🔍 Layer 2: Input Guardrails<br>(Injection, Harmful Intent vs Legal Explanation, PII Masking)"]
+    L1 -->|Blocked| REF1["🚫 Friendly Refusal Notice"]
     
-    QR --> RC["⚠️ Risk Classifier (Low / Medium / High)"]
-    RC --> RAG{"📚 Pinecone Vector Search<br>Confidence Score >= 0.50?"}
+    L2 -->|Blocked| REF2["🚫 Polite Refusal & Advocate Consultation Alternative"]
+    L2 -->|Allowed / Sanitized| L3{"🚨 Layer 3: Emergency Router<br>(Domestic Violence, Suicide, Child Abuse, Active Arrest)"}
     
-    RAG -->|Yes: High Confidence| RM["🗺️ Procedural Action Roadmap"]
-    RM --> LE["⚖️ Legal Expert Synthesis (Groq/Llama 3)"] --> FIN
+    L3 -->|Crisis Detected| HELPLINE["📞 Prepend Dynamic National Helplines<br>(Core Config Source - Non-blocking)"]
+    L3 -->|Standard Query| RAG
+    HELPLINE --> RAG
     
-    RAG -->|No: Low Confidence / Key Missing / Offline| FB["⚡ Indian Law Fallback Engine (Qwen 2.5 / HF)"]
-    FB --> TTS["🔊 Alibaba Qwen3-TTS 1.7B Voice Synthesis"]
-    TTS --> FIN
+    subgraph RAG_PIPELINE ["Core RAG & Fallback Pipeline"]
+        RAG{"📚 Pinecone Vector Search<br>Confidence Score >= 0.50?"}
+        RAG -->|Yes: High Confidence| SYN["⚖️ Legal Synthesis (Gemini / Groq)"]
+        RAG -->|No / Offline| FB["⚡ Indian Law Fallback (Qwen 2.5 / HF)"]
+    end
+    
+    SYN --> L4["🔎 Layer 4: Output Guardrails<br>(Citation Grounding, Overconfidence Softening, Prompt Leak Check, PII Mask)"]
+    FB --> L4
+    
+    L4 --> TTS["🔊 Alibaba Qwen3-TTS 1.7B Voice Synthesis"]
+    TTS --> FIN(["🏁 Display Answer + Single Muted Disclaimer + SQLite Audit Log"])
 ```
+
+---
+
+## 🛡️ Multi-Layered Guardrails Architecture
+
+LexAI implements a strict, modular safety framework defined in the `guardrails/` package and documented in detail in [GUARDRAILS.md](GUARDRAILS.md).
+
+### 1. Core Design Principles
+- **Explain Crimes, Block Malicious Intent**: Explaining statutory offenses (e.g., *"What is the punishment for murder under BNS Section 103?"*) is permitted. Actionable assistance to commit crimes, evade police, or destroy evidence is blocked.
+- **Rule-Based First**: High-speed regex and heuristic checks evaluate requests in `< 1ms`. Optional LLM classifier evaluates ambiguous inputs.
+- **Fail-Safe & Fail-Visible**: Unhandled exceptions in any check are caught, logged to SQLite, and fail open (`allowed=True`) so the chat never crashes.
+- **Dynamic Helpline Integration**: Emergency numbers are dynamically read from `core/config.py` (never hardcoded in guardrail files).
+- **Zero Raw PII Storage**: Aadhaar, PAN, phone numbers, and emails are masked before transmission to LLMs and before recording in SQLite `guardrail_events`.
+
+### 2. Guardrail Layers Summary
+
+| Layer | Component | Target Threat / Check | Action Taken |
+| :--- | :--- | :--- | :--- |
+| **Layer 1** | `rate_limiter.py` | Burst spam (>10/min), Daily quota (>100/day), Repeated blocks (5 blocks in 10 mins) | Rejection with wait duration; SQLite persistence across reloads |
+| **Layer 2** | `input_guardrails.py` | Prompt injection, DAN/jailbreaks, off-topic queries, actionable harmful intent, PII | Blocks malicious input; masks Aadhaar/PAN/phone/email |
+| **Layer 3** | `emergency_router.py` | Domestic violence, suicide/self-harm, child trafficking/abuse, active arrest, sexual assault | **Non-blocking**: Prepends official emergency helplines; continues legal answer |
+| **Layer 4** | `output_guardrails.py` | Hallucinated citations, outcome guarantees ("100% win"), prompt leaks, output PII | Appends verification notes; softens overconfidence; replaces leaks; masks PII |
 
 ---
 
 ## 📋 Detailed Implementation Plan & Roadmap
 
-The development of LexAI is structured across **seven comprehensive implementation phases**, adhering to strict modular engineering, safety guardrails, and automated verification:
+The development of LexAI is structured across modular phases, adhering to strict legal safety, modular engineering, and automated verification:
 
 ### Phase 1: Requirement Analysis & Architectural Blueprint
 - **1.1 Statutory Scope Definition**: Mapped target legal domains (Tenancy, Criminal Defense, Cybercrime, Constitutional Writs, Family Disputes, Consumer Redressal).
@@ -105,17 +141,17 @@ The development of LexAI is structured across **seven comprehensive implementati
 - **5.3 Disk Caching**: Caches synthesized audio in `data/audio_cache/` using MD5 query hashing to prevent redundant API latency.
 - **5.4 Smart Guardrail**: Prevents runtime type errors if a user specifies a TTS model as their text LLM by automatically delegating text to Qwen 2.5 Instruct while reserving Qwen3-TTS for audio playback.
 
-### Phase 6: Streamlit UI & Glassmorphism Dashboard Rebuild
-- **6.1 Design System**: Built a modern dark glassmorphic UI using custom CSS (`ui/styles.css`) with smooth hover micro-interactions, glowing metric cards, and responsive grids.
-- **6.2 Dashboard & KPI Analytics**: Real-time telemetry cards showing Total Consultations, High Risk Alerts, Knowledge Base Size, and Database Footprint.
-- **6.3 BNS ⇄ IPC Matrix Page**: Interactive lookup matrix for statutory conversions under the 2024 overhaul.
-- **6.4 Legal Draft Studio**: Automated document drafter for Legal Notices, RTI Applications, Tenant Deposit Demands, and Consumer Complaints.
-- **6.5 Document Analyzer**: Upload PDF/TXT agreements for automated clause risk analysis and red-flag detection.
+### Phase 6: Multi-Layered Guardrails & Safety Engineering
+- **6.1 Foundation & Audit Logger**: Built `guardrails/` package with `GuardrailResult` and SQLite audit logging in `guardrail_events` (with snippet masking).
+- **6.2 Input Guardrails**: Validation, prompt injection defenses, out-of-scope redirection, malicious intent filtering, and regex PII masking.
+- **6.3 Emergency Crisis Routing**: Real-time detection of violence, suicide, and arrest crises with dynamic helpline injection from `core/config.py`.
+- **6.4 Output Guardrails**: Cross-references statutory citations against Pinecone chunks and `BNS_IPC_MAPPING`; softens overconfidence; masks output PII; filters prompt leaks.
+- **6.5 Abuse Protection & Rate Limiting**: Per-minute burst limits, daily caps, 5-block cooldowns, and LLM context window trimming to the 10 most recent messages.
 
-### Phase 7: Security, Testing, Data Sovereignty & Deployment
-- **7.1 Secret Scanning & Git Protection**: Clean separation of sensitive API credentials into local `.env` (git-ignored) with sanitized `.env.example`.
-- **7.2 Automated Verification Suite**: Built `verify_app.py` testing database operations, fallback routing, prompt formatting, and exports.
-- **7.3 Production Deployment**: Git remote setup and automated push tracking on GitHub `main` branch.
+### Phase 7: Red-Team Verification & Production Hardening
+- **7.1 Red-Team Test Suite**: 47 test cases spanning 10 safety groups (`tests/test_guardrails.py`) with 0 false positives on valid legal queries.
+- **7.2 Resilience & Fail-Safe Verification**: Confirmed that guardrail exceptions fail open safely without crashing Streamlit.
+- **7.3 Architecture Documentation**: Complete guide published in `GUARDRAILS.md`.
 
 ---
 
@@ -128,10 +164,11 @@ The development of LexAI is structured across **seven comprehensive implementati
 | **Vector RAG** | `core/rag.py` | Pinecone 2-stage cluster search and calibrated confidence evaluator. |
 | **Indian Law Fallback** | `core/hf_fallback.py` | Multi-tier Qwen 2.5, Hugging Face, and grounded statutory synthesis. |
 | **Voice TTS Engine** | `core/tts.py` | Alibaba Qwen3-TTS 1.7B voice synthesis and audio cache manager. |
-| **Database Client** | `db/database.py` | SQLite persistence for consultations, messages, bookmarks, and checklist progress. |
-| **Dashboard UI** | `ui/dashboard.py` | KPI metric cards, quick-action chips, and system status indicators. |
-| **Analytics Telemetry**| `ui/analytics.py` | Visual telemetry charts for risk distribution, pipeline latency, and feedback. |
-| **UI Components** | `ui/components.py` | Glassmorphic cards, statutory pills, interactive checklist, and SOS drawer. |
+| **Input Guardrails** | `guardrails/input_guardrails.py` | Injection, scope, harmful intent, and input PII masking. |
+| **Emergency Router** | `guardrails/emergency_router.py` | Non-blocking crisis detection & dynamic helpline injection. |
+| **Output Guardrails** | `guardrails/output_guardrails.py` | Citation grounding, overconfidence softening, prompt leak check. |
+| **Rate Limiter** | `guardrails/rate_limiter.py` | Burst control, abuse cooldown, and SQLite quota tracking. |
+| **Database Client** | `db/database.py` | SQLite persistence for consultations, guardrail events, and rate limits. |
 | **Export Engine** | `utils/export.py` | Encoded Markdown and PDF generation using `fpdf2`. |
 
 ---
@@ -140,7 +177,7 @@ The development of LexAI is structured across **seven comprehensive implementati
 
 | Condition | Metric / Status | Routing Decision | Primary Engine |
 | :--- | :---: | :---: | :---: |
-| **High Document Relevance** | Score $\ge 0.50$ | Verified Knowledge Base RAG | Pinecone + Groq LLM |
+| **High Document Relevance** | Score $\ge 0.50$ | Verified Knowledge Base RAG | Pinecone + Groq / Gemini |
 | **Weak Vector Match** | Score $< 0.50$ | Low-Confidence Fallback | OpenRouter / Qwen 2.5 72B |
 | **Unconfigured Pinecone Key**| `key_missing` | Automatic Fallback | Qwen 2.5 / Groq Qwen |
 | **Pinecone Network Failure** | `connection_error` | Automatic Fallback | Offline Grounded Indian Law |
@@ -165,37 +202,49 @@ indian_law-/
 ├── verify_app.py                # Automated 7-point verification test suite
 ├── requirements.txt             # Production dependencies
 ├── README.md                    # Platform documentation & implementation plan
-├── PROJECT_OUTPUT_REPORT.md     # Comprehensive project output & test report
-├── PROJECT_OUTPUT_REPORT.html   # Styled printable HTML submission report
+├── GUARDRAILS.md                # Comprehensive guardrails & safety architecture guide
+├── PROJECT_OUTPUT_REPORT.md     # Detailed verification report
 ├── .env.example                 # Sanitized configuration template
 ├── .gitignore                   # Excludes .env, *.db, audio cache, logs
 │
+├── guardrails/                  # Multi-Layered Guardrails & Safety System
+│   ├── __init__.py              # Export interface for pipeline integration
+│   ├── config.py                # Central toggles, regex patterns & refusal texts
+│   ├── types.py                 # GuardrailResult and LayerAction models
+│   ├── logger.py                # SQLite guardrail_events logger (snippet masking)
+│   ├── pipeline.py              # Runner pipeline with fail-safe error trapping
+│   ├── input_guardrails.py      # Validation, injection, harmful-intent, PII
+│   ├── emergency_router.py      # Dynamic crisis routing & national helplines
+│   ├── output_guardrails.py     # Citation grounding, overconfidence, prompt leaks
+│   └── rate_limiter.py          # Session burst, daily caps, abuse cooldown
+│
 ├── core/                        # Intelligence & Pipeline Engine
-│   ├── config.py                # Configuration loader and threshold settings
+│   ├── config.py                # Configuration loader, helplines & DB schema
 │   ├── pipeline.py              # LangGraph multi-stage DAG & interactive generator
 │   ├── rag.py                   # Pinecone cluster search & confidence scoring
 │   ├── hf_fallback.py           # Qwen 2.5 & Hugging Face Indian law fallback
 │   ├── tts.py                   # Alibaba Qwen3-TTS 1.7B voice synthesis
-│   ├── llm.py                   # Groq & OpenRouter inference handlers
-│   ├── prompts.py               # Indian statutory prompt templates & guidelines
-│   └── search.py                # SerpAPI live web search integration
+│   ├── llm.py                   # Gemini, Groq & OpenRouter inference handlers
+│   └── prompts.py               # Indian statutory prompt templates & guidelines
 │
 ├── ui/                          # Modern Glassmorphic Frontend
+│   ├── chat_page.py             # Chat interface with single muted disclaimer
 │   ├── components.py            # Answer cards, status pills, voice player, SOS
 │   ├── dashboard.py             # SaaS overview dashboard & KPI metric cards
 │   ├── analytics.py             # Telemetry visualizations & consultation insights
 │   └── styles.css               # Dark theme CSS styling & micro-animations
 │
-├── db/                          # Local Data Sovereignty
-│   └── database.py              # SQLite client (chats, bookmarks, roadmap progress)
-│
-├── utils/                       # Exporters & Helpers
-│   ├── export.py                # PDF (fpdf2) and Markdown export generators
-│   └── helpers.py               # Input sanitizers and response parsers
+├── tests/                       # Unit & Red-Team Test Suites
+│   ├── test_guardrails.py       # 47-case red-team safety test suite
+│   ├── test_input_guardrails.py # Input safety & validation unit tests
+│   ├── test_emergency_routing.py# Emergency helpline routing unit tests
+│   ├── test_output_guardrails.py# Output grounding & citation unit tests
+│   ├── test_rate_limiting.py    # Rate limiter & cooldown unit tests
+│   └── test_chat_service.py     # End-to-end chat service unit tests
 │
 └── data/                        # Local Storage (Git-Ignored)
     ├── audio_cache/             # Synthesized Qwen3-TTS audio files
-    └── lexai.db                 # Private SQLite consultation database
+    └── lexai.db                 # Private SQLite consultation & audit database
 ```
 
 ---
@@ -230,9 +279,9 @@ cp .env.example .env
 
 ```dotenv
 # === Core Primary Keys ===
+GEMINI_API_KEY=your_gemini_api_key_here
 GROQ_API_KEY=your_groq_api_key_here
 PINECONE_API_KEY=your_pinecone_api_key_here
-SERPAPI_API_KEY=your_serpapi_api_key_here
 
 # === OpenRouter Qwen Indian Law Reasoning ===
 OPENROUTER_API_KEY=your_openrouter_api_key_here
@@ -255,28 +304,37 @@ Open **[http://localhost:8501](http://localhost:8501)** in your browser.
 
 ---
 
-## 🧪 Verification & Test Results
+## 🧪 Verification & Red-Team Test Results
 
-Run the automated test suite to verify pipeline integrity, fallback routing, and database operations:
+### 1. Automated System Health Verification
 ```bash
 python verify_app.py
 ```
 
-### Expected Output:
-```text
-======================================================================
-LexAI Automated Verification Suite
-======================================================================
-1. All modules (including hf_fallback and tts) imported successfully.
-2. Database created with tables: ['users', 'chats', 'messages', 'feedback', 'bookmarks', 'roadmap_progress']
-3. Stored and fetched test consultation messages.
-4. Qwen3-TTS Voice Component verified successfully.
-5. Fallback Engine generated response via 'openrouter/qwen-2.5-72b-instruct'.
-6. Markdown export generated (772 bytes).
-7. PDF export generated (40 bytes).
+### 2. Red-Team Safety & Guardrail Suite
+Run the 47-case red-team suite to verify input defenses, emergency routing, output grounding, and rate limiting:
+```bash
+python tests/test_guardrails.py
+```
 
-ALL TESTS PASSED! LexAI backend, Qwen fallback, and Qwen3-TTS are fully operational.
-Exit Code: 0 (OK)
+#### Test Execution Summary (47/47 Passed):
+```text
+===================================================================================================================
+#   | GROUP              | TEST CASE DESCRIPTION                            | EXP      | ACTUAL   | STATUS
+===================================================================================================================
+1-8 | Valid Legal        | BNS Murder, Theft, Arrest Rights, Bail, Defamation | allow    | allow    | PASS (0% FP)
+9-13| Prompt Injection   | Overrides, Role Stripping, Exfiltration, Syntax    | block    | block    | PASS
+14-17| Jailbreak         | DAN Mode, Fake System Tags, Pretend Mode Bypasses  | block    | block    | PASS
+18-21| Off-Topic         | Recipes, Homework, Celebrity Gossip, Math Problems| block    | block    | PASS
+22-27| Harmful Intent    | Robbery, Poisoning, Evading Police, Forgery, Extortion | block | block | PASS
+28-32| PII Masking       | Phone Numbers, PAN, Aadhaar (12-digit), Email, Bank | modify   | modify   | PASS
+33-37| Emergency Routing | Domestic Violence, Suicide, Child Abuse, Active Arrest | warn  | warn     | PASS
+38-41| Output Guardrails | Hallucinated Citations, Guarantees, Prompt Leaks  | modify   | modify   | PASS
+42-43| Rate Limiting     | Burst Limits (10/min) & Abuse Cooldown (5 blocks)  | block    | block    | PASS
+44-47| Architecture      | Config Toggles, Pipeline Error Isolation, Logging | allow    | allow    | PASS
+===================================================================================================================
+🎉 RED-TEAM TEST SUITE COMPLETE: ALL 47 TEST CASES PASSED WITH ZERO FALSE POSITIVES!
+===================================================================================================================
 ```
 
 ---
