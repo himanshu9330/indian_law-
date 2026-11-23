@@ -48,13 +48,14 @@ from utils.helpers import parse_risk_response, parse_structured_answer
 
 # ── TypedDict for LangGraph State ─────────────────────────────────────────
 
-class GraphState(TypedDict):
+class GraphState(TypedDict, total=False):
     query: str
     domain: str
     refined_query: str
     risk: str
     risk_reason: str
     context: str
+    history_context: Optional[str]
     score: float
     confidence_score: float
     matched_cluster: Optional[int]
@@ -287,6 +288,8 @@ def legal_expert_node(state: GraphState) -> GraphState:
     detail_level = "simple, plain-language" if style == "simple" else "thorough and well-reasoned"
 
     context = state.get("context") or "No direct statute context found."
+    if state.get("history_context"):
+        context = f"RECENT CONVERSATION CONTEXT:\n{state['history_context']}\n\nSTATUTORY CONTEXT:\n{context}"
     risk_level = (state.get("risk") or "low").upper()
 
     prompt = LEGAL_EXPERT.format(
@@ -299,7 +302,12 @@ def legal_expert_node(state: GraphState) -> GraphState:
 
     final_answer = call_llm(
         prompt=prompt,
-        system_prompt="You are a STRICT Indian legal assistant. Follow the exact section headers requested.",
+        system_prompt=(
+            "You are LexAI, an Indian legal information assistant. "
+            "Provide general legal information, not legal advice. "
+            "Never guarantee outcomes, state when unsure, never invent section numbers or case names, "
+            "and stay strictly in scope. Follow the exact section headers requested."
+        ),
         temperature=0.3,
         api_key=state.get("groq_api_key"),
         openrouter_api_key=state.get("openrouter_api_key"),
@@ -374,6 +382,7 @@ def run_query(
     openrouter_model: Optional[str] = None,
     hf_api_key: Optional[str] = None,
     hf_model: Optional[str] = None,
+    history_context: Optional[str] = None,
 ) -> Generator[dict[str, Any], None, dict[str, Any]]:
     """
     Step-by-step pipeline execution yielding progress events.
@@ -393,6 +402,7 @@ def run_query(
         "risk": "low",
         "risk_reason": "",
         "context": "",
+        "history_context": history_context or "",
         "score": 0.0,
         "confidence_score": 0.0,
         "matched_cluster": None,

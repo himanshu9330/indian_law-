@@ -123,70 +123,76 @@ def search_rag(
             "message": "Embedding model or Pinecone index unreachable.",
         }
 
-    try:
-        query_embedding = model.encode(query).tolist()
+    for attempt in range(2):
+        try:
+            query_embedding = model.encode(query).tolist()
 
-        # Stage 1: Find best cluster
-        first_search = index.query(
-            vector=query_embedding,
-            top_k=1,
-            include_metadata=True,
-        )
-
-        best_cluster_id = None
-        if first_search.get("matches") and len(first_search["matches"]) > 0:
-            best_cluster_id = first_search["matches"][0]["metadata"].get("cluster_id")
-
-        contexts = []
-        chunks_info = []
-        best_score = 0.0
-
-        if best_cluster_id is not None:
-            # Stage 2: Deep dive with cluster filter
-            deep_search = index.query(
+            # Stage 1: Find best cluster
+            first_search = index.query(
                 vector=query_embedding,
-                top_k=top_k,
-                filter={"cluster_id": {"$eq": best_cluster_id}},
+                top_k=1,
                 include_metadata=True,
             )
 
-            if deep_search.get("matches"):
-                best_score = float(deep_search["matches"][0]["score"])
-                for match in deep_search["matches"]:
-                    text = match["metadata"].get("text", "")
-                    chunk_score = float(match.get("score", 0.0))
-                    if text:
-                        contexts.append(text)
-                        chunks_info.append({
-                            "text": text,
-                            "score": round(chunk_score, 3),
-                            "cluster_id": best_cluster_id,
-                        })
+            best_cluster_id = None
+            if first_search.get("matches") and len(first_search["matches"]) > 0:
+                best_cluster_id = first_search["matches"][0]["metadata"].get("cluster_id")
 
-        combined_context = "\n\n---\n\n".join(contexts)
-        calibrated_score = round(max(0.0, min(1.0, best_score)), 3)
-        status = "success" if contexts else "no_documents_found"
+            contexts = []
+            chunks_info = []
+            best_score = 0.0
 
-        return {
-            "context": combined_context,
-            "score": calibrated_score,
-            "confidence_score": calibrated_score,
-            "cluster_id": best_cluster_id,
-            "chunks": chunks_info,
-            "chunk_count": len(chunks_info),
-            "source": "pinecone_rag",
-            "status": status,
-        }
-    except Exception as e:
-        print(f"RAG search error: {e}")
-        return {
-            "context": "",
-            "score": 0.0,
-            "confidence_score": 0.0,
-            "cluster_id": None,
-            "chunks": [],
-            "chunk_count": 0,
-            "source": "pinecone_rag",
-            "status": "connection_error",
-            "error": str(e),
-        }
+            if best_cluster_id is not None:
+                # Stage 2: Deep dive with cluster filter
+                deep_search = index.query(
+                    vector=query_embedding,
+                    top_k=top_k,
+                    filter={"cluster_id": {"$eq": best_cluster_id}},
+                    include_metadata=True,
+                )
+
+                if deep_search.get("matches"):
+                    best_score = float(deep_search["matches"][0]["score"])
+                    for match in deep_search["matches"]:
+                        text = match["metadata"].get("text", "")
+                        chunk_score = float(match.get("score", 0.0))
+                        if text:
+                            contexts.append(text)
+                            chunks_info.append({
+                                "text": text,
+                                "score": round(chunk_score, 3),
+                                "cluster_id": best_cluster_id,
+                            })
+
+            combined_context = "\n\n---\n\n".join(contexts)
+            calibrated_score = round(max(0.0, min(1.0, best_score)), 3)
+            status = "success" if contexts else "no_documents_found"
+
+            return {
+                "context": combined_context,
+                "score": calibrated_score,
+                "confidence_score": calibrated_score,
+                "cluster_id": best_cluster_id,
+                "chunks": chunks_info,
+                "chunk_count": len(chunks_info),
+                "source": "pinecone_rag",
+                "status": status,
+            }
+        except Exception as e:
+            if attempt == 0:
+                import time
+                time.sleep(0.5)
+                continue
+            print(f"RAG search error after retry: {e}")
+            return {
+                "context": "",
+                "score": 0.0,
+                "confidence_score": 0.0,
+                "cluster_id": None,
+                "chunks": [],
+                "chunk_count": 0,
+                "source": "pinecone_rag",
+                "status": "connection_error",
+                "error": str(e),
+                "fallback_reason": f"Pinecone vector service temporarily unreachable: {str(e)}",
+            }

@@ -191,8 +191,20 @@ def render_chat_page():
 
     # 3. Single Unified Message Sending Path
     if st.session_state.get("pending_prompt"):
-        prompt_to_send = st.session_state.pop("pending_prompt").strip()
+        prompt_to_send = st.session_state.pop("pending_prompt", "").strip()
         if prompt_to_send:
+            # Prevent rapid accidental double-clicks or duplicate sends
+            import time
+            now_t = time.time()
+            last_prompt = st.session_state.get("_last_sent_prompt")
+            last_t = st.session_state.get("_last_sent_time", 0.0)
+
+            if prompt_to_send == last_prompt and (now_t - last_t < 1.0):
+                st.rerun()
+
+            st.session_state["_last_sent_prompt"] = prompt_to_send
+            st.session_state["_last_sent_time"] = now_t
+
             # Render user message optimistically
             with st.chat_message("user"):
                 st.markdown(prompt_to_send)

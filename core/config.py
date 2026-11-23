@@ -36,6 +36,7 @@ if not os.getenv("GROQ_API_KEY"):
 
 # ── API Keys ─────────────────────────────────────────────────────────────
 GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "").strip("\"' ")
+GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "").strip("\"' ")
 PINECONE_API_KEY: str = os.getenv("PINECONE_API_KEY", "").strip("\"' ")
 SERPAPI_API_KEY: str = os.getenv("SERPAPI_API_KEY", "").strip("\"' ")
 HUGGINGFACE_API_KEY: str = os.getenv("HUGGINGFACE_API_KEY", os.getenv("HF_TOKEN", "")).strip("\"' ")
@@ -43,6 +44,7 @@ OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "").strip("\"' ")
 
 # ── Model settings ───────────────────────────────────────────────────────
 GROQ_MODEL: str = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b").strip("\"' ")
+GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-1.5-flash").strip("\"' ")
 EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
 PINECONE_INDEX: str = "law-suggestion-index"
 HUGGINGFACE_MODEL: str = os.getenv("HUGGINGFACE_MODEL", "law-ai/InLegalBERT").strip("\"' ")
@@ -156,6 +158,7 @@ HELPLINES: list[dict] = [
     {"name": "Consumer Helpline", "number": "1915", "icon": "🛒", "desc": "Consumer complaints"},
     {"name": "Child Helpline", "number": "1098", "icon": "👶", "desc": "Child abuse/distress"},
     {"name": "Senior Citizen", "number": "14567", "icon": "🧓", "desc": "Elder abuse helpline"},
+    {"name": "Tele-MANAS Mental Health Helpline", "number": "14416", "icon": "🧠", "desc": "24/7 mental health & distress counseling"},
 ]
 
 # ── BNS 2024 vs IPC 1860 & BNSS vs CrPC Verified Cross-Reference ────────

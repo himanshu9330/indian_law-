@@ -18,7 +18,17 @@ except ImportError:
     Groq = None
     _HAS_GROQ = False
 
+try:
+    import google.generativeai as genai
+    from google.generativeai.types import HarmCategory, HarmBlockThreshold
+    _HAS_GEMINI = True
+except ImportError:
+    genai = None
+    _HAS_GEMINI = False
+
 from core.config import (
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
     GROQ_API_KEY,
     GROQ_MODEL,
     LLM_TEMPERATURE,
@@ -28,6 +38,27 @@ from core.config import (
 from core.prompts import (
     FOLLOWUP_GENERATOR,
     TITLE_GENERATOR,
+)
+
+# Explicit Gemini safety settings to ensure comprehensive safety boundaries
+if _HAS_GEMINI:
+    EXPLICIT_GEMINI_SAFETY_SETTINGS = {
+        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+    }
+else:
+    EXPLICIT_GEMINI_SAFETY_SETTINGS = {}
+
+# Hardened default system prompt
+HARDENED_SYSTEM_PROMPT = (
+    "You are LexAI, an Indian legal information assistant. "
+    "Provide general legal information, NOT formal legal advice. "
+    "Do not establish an attorney-client relationship. "
+    "Never guarantee outcomes, explicitly state when unsure, "
+    "never invent or hallucinate section numbers or case names, "
+    "and stay strictly within the scope of Indian law."
 )
 
 # Ordered fallback models to try if the requested model returns 404 / model_not_found
@@ -117,19 +148,105 @@ def _call_openrouter_llm(
     return None
 
 
+def call_gemini(
+    prompt: str,
+    system_prompt: str = HARDENED_SYSTEM_PROMPT,
+    model: Optional[str] = None,
+    api_key: Optional[str] = None,
+    temperature: float = LLM_TEMPERATURE,
+) -> str:
+    """
+    Call Google Gemini with explicit safety settings and safe fallback handling
+    for blocked or empty responses.
+    """
+    key = (api_key or os.getenv("GEMINI_API_KEY") or GEMINI_API_KEY or "").strip().strip("\"' ")
+    if not _HAS_GEMINI or not key or key in ("", "your_gemini_api_key_here"):
+        return ""
+    if key == "test_simulated_error":
+        return ""
+
+    m = model or os.getenv("GEMINI_MODEL") or GEMINI_MODEL or "gemini-1.5-flash"
+    for attempt in range(2):
+        try:
+            genai.configure(api_key=key)
+            gen_model = genai.GenerativeModel(
+                model_name=m,
+                system_instruction=system_prompt,
+                generation_config={"temperature": temperature},
+                safety_settings=EXPLICIT_GEMINI_SAFETY_SETTINGS,
+            )
+            try:
+                response = gen_model.generate_content(prompt, request_options={"timeout": 5.0})
+            except TypeError:
+                response = gen_model.generate_content(prompt)
+
+            # Check for blocked or empty response
+            if not response or not hasattr(response, "candidates") or not response.candidates:
+                return (
+                    "The response was restricted by safety filters. LexAI provides general legal information "
+                    "within lawful and ethical boundaries. For advice on this specific matter, please consult a qualified advocate."
+                )
+
+            candidate = response.candidates[0]
+            finish_reason = getattr(candidate, "finish_reason", None)
+            if finish_reason and "SAFETY" in str(finish_reason):
+                return (
+                    "The response was restricted by safety filters. LexAI provides general legal information "
+                    "within lawful and ethical boundaries. For advice on this specific matter, please consult a qualified advocate."
+                )
+
+            try:
+                text = response.text if hasattr(response, "text") and response.text else ""
+            except Exception:
+                text = ""
+
+            if not text.strip():
+                return (
+                    "The legal assistant was unable to generate a response for this query. "
+                    "Please consult a qualified legal professional for guidance."
+                )
+            return text.strip()
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "safety" in err_msg or "blocked" in err_msg or "finish_reason" in err_msg:
+                return (
+                    "The response was restricted by safety filters. LexAI provides general legal information "
+                    "within lawful and ethical boundaries. For advice on this specific matter, please consult a qualified advocate."
+                )
+            if ("quota" in err_msg or "429" in err_msg or "resourceexhausted" in err_msg or "timeout" in err_msg or "connection" in err_msg) and attempt == 0:
+                import time
+                time.sleep(1.0)
+                continue
+            print(f"Gemini call error: {e}")
+            return ""
+
+
 def call_llm(
     prompt: str,
-    system_prompt: str = "You are a helpful legal AI assistant specializing in Indian law.",
+    system_prompt: str = HARDENED_SYSTEM_PROMPT,
     model: Optional[str] = None,
     temperature: float = LLM_TEMPERATURE,
     api_key: Optional[str] = None,
     openrouter_api_key: Optional[str] = None,
     openrouter_model: Optional[str] = None,
+    gemini_api_key: Optional[str] = None,
 ) -> str:
     """
-    Standard LLM call using Groq with automatic model fallback,
-    seamlessly routing to OpenRouter (Qwen) if Groq key is missing or encounters errors.
+    Standard LLM call using Gemini (if configured) or Groq with automatic fallback,
+    seamlessly routing to OpenRouter (Qwen) if other keys are missing or encounter errors.
     """
+    # 0. Attempt Google Gemini if key is available
+    gkey = (gemini_api_key or os.getenv("GEMINI_API_KEY") or GEMINI_API_KEY or "").strip().strip("\"' ")
+    if gkey and gkey not in ("", "your_gemini_api_key_here"):
+        gemini_res = call_gemini(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            api_key=gkey,
+            temperature=temperature,
+        )
+        if gemini_res and gemini_res.strip():
+            return gemini_res.strip()
+
     key = _clean_key(api_key)
 
     # 1. Attempt Groq if key is configured

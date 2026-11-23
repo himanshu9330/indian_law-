@@ -1,7 +1,8 @@
 """
 LexAI Chat Service Layer
 Coordinates conversation management, RAG retrieval, LLM fallback,
-structured legal advice persistence, and dynamic follow-up inquiry generation.
+safety-critical emergency routing, structured legal advice persistence,
+and multi-layered input/output guardrails.
 """
 
 import json
@@ -11,10 +12,12 @@ from typing import Any, Optional
 
 from core.llm import call_llm
 from core.pipeline import run_query
+from guardrails import GUARDRAILS_CONFIG, run_input_guardrails, run_output_guardrails
 from services.conversations import (
     add_message,
     create_conversation,
     get_conversation,
+    get_messages,
 )
 
 logger = logging.getLogger("lexai.chat_service")
@@ -82,21 +85,22 @@ ASSISTANT ANSWER:
     except Exception as e:
         logger.warning(f"Follow-up generation failed: {e}")
 
-    # Return empty list on failure — never return fake/default questions
     return []
 
 
 def send_message(conversation_id: Optional[str], user_text: str) -> ChatResponse:
     """
     Execute complete consultation cycle:
-    1. Validates inputs.
-    2. If conversation_id is None, creates a conversation (title = first user question trimmed to ~40 chars).
-    3. Saves the user message.
-    4. Calls the EXISTING RAG + LLM + Fallback + Risk pipeline.
-    5. Generates follow-ups and saves the AI reply with full metadata in database.
-    6. Returns reply, metadata, and conversation_id.
+    1. Validates inputs & sets up conversation.
+    2. Runs input guardrails (validation, injection, emergency routing, scope, harm, PII).
+    3. If blocked: records refusal and returns early without calling LLM.
+    4. If emergency (e.g. self-harm, domestic violence, active arrest):
+       - Prepends calm supportive message with dynamic helpline numbers at TOP of response.
+       - Suicide/self-harm: leads with support and keeps legal information brief.
+    5. Runs RAG + LLM + Fallback with sanitized text.
+    6. Saves assistant reply with metadata and returns response.
     """
-    # 1. Validation
+    # 1. Validation & Conversation Initialization
     if not user_text or not user_text.strip():
         raise ValueError("User message cannot be empty or whitespace.")
 
@@ -113,62 +117,185 @@ def send_message(conversation_id: Optional[str], user_text: str) -> ChatResponse
             title = title.rstrip(".,;:?!- ") + "..."
         conversation_id = create_conversation(title=title)
 
-    # 2. Save User Message
+    # 2. Run Input Guardrails
+    guard_ctx = {"conversation_id": conversation_id}
+    input_guard = run_input_guardrails(clean_text, context=guard_ctx)
+
+    if not input_guard.allowed:
+        logger.info(f"Message blocked by input guardrail: {input_guard.reason_code}")
+        # Save user message marked as blocked so it won't be used as LLM context
+        add_message(
+            conversation_id=conversation_id,
+            role="user",
+            content=clean_text,
+            metadata={
+                "blocked": True,
+                "reason_code": input_guard.reason_code,
+                "action": input_guard.action,
+            },
+        )
+        # Save blocked refusal as normal assistant reply
+        refusal_reply = input_guard.user_message or GUARDRAILS_CONFIG.get_refusal(input_guard.reason_code)
+        blocked_meta = {
+            "risk": "blocked",
+            "confidence": 0.0,
+            "fallback_used": False,
+            "statutes": [],
+            "steps": [],
+            "rights": [],
+            "sources": [],
+            "follow_ups": [],
+            "answer_source": "guardrail_blocked",
+            "reason_code": input_guard.reason_code,
+            "guardrail_action": input_guard.action,
+        }
+        add_message(
+            conversation_id=conversation_id,
+            role="assistant",
+            content=refusal_reply,
+            metadata=blocked_meta,
+        )
+        return ChatResponse({
+            "reply": refusal_reply,
+            "metadata": blocked_meta,
+            "conversation_id": conversation_id,
+        })
+
+    # 3. Determine sanitized text for LLM (masked PII / stripped control characters)
+    text_for_llm = input_guard.sanitized_text or clean_text
+
+    # Save User Message to database
     add_message(
         conversation_id=conversation_id,
         role="user",
         content=clean_text,
+        metadata={
+            "pii_masked": guard_ctx.get("pii_masked", False),
+            "emergency_type": guard_ctx.get("emergency_type"),
+        },
     )
 
-    # 3. Call Existing RAG + LLM + Fallback + Risk pipeline
-    try:
-        runner = run_query(query=clean_text)
-        final_result = None
-        for event in runner:
-            if event.get("node") == "complete":
-                final_result = event.get("result")
+    emergency_type = guard_ctx.get("emergency_type")
+    emergency_banner = guard_ctx.get("emergency_banner")
 
-        if not final_result:
-            raise RuntimeError("Pipeline failed to produce a final legal response.")
-    except Exception as e:
-        logger.error(f"Legal pipeline execution failed: {e}")
-        # Provide resilient legal error reply if pipeline crashes
-        final_result = {
-            "raw_answer": f"An error occurred while analyzing this legal matter: {str(e)}. Please try rephrasing your question.",
-            "answer_sections": {
-                "legal_summary": "Service encountered a processing error.",
-                "relevant_laws": [],
-                "action_roadmap": [],
-                "important_rights": [],
-                "lawyer_needed": "Required",
-                "lawyer_reason": "Technical processing exception.",
-            },
-            "risk": "medium",
-            "confidence_score": 0.0,
-            "answer_source": "error_handler",
-            "fallback_reason": str(e),
-            "retrieved_chunks": [],
+    # 4. Handle Suicide / Self-Harm with brief supportive legal summary
+    if emergency_type == "suicide":
+        suicide_legal_advice = (
+            "### Legal Context & Citizen Rights (Mental Healthcare Act, 2017)\n"
+            "- **Decriminalization of Suicide (Section 115)**: Under Section 115 of the Mental Healthcare Act, 2017, "
+            "any person who attempts to commit suicide is presumed to be under severe stress and is NOT liable to prosecution or punishment under the penal code.\n"
+            "- **Government Statutory Duty**: The Central and State Governments have an explicit legal duty to provide care, treatment, and rehabilitation.\n"
+            "- **Right to Confidential Medical Support**: Every person has a legally protected right to access mental healthcare services in complete confidentiality and without fear of police inquiry.\n\n"
+            "Please call the Tele-MANAS helpline (`14416`) or Emergency (`112`) right away. You are not alone and support is always here."
+        )
+        raw_reply = f"{emergency_banner}\n\n---\n\n{suicide_legal_advice}"
+        sections = {
+            "legal_summary": suicide_legal_advice,
+            "relevant_laws": [{"section": "Section 115, Mental Healthcare Act, 2017", "description": "Presumption of severe stress; non-prosecution for suicide attempts"}],
+            "action_roadmap": ["Contact Tele-MANAS helpline (14416) or emergency (112)", "Reach out to a medical professional or trusted confidant"],
+            "important_rights": ["Right to access confidential healthcare without stigma", "Protection from prosecution under Section 115"],
+            "lawyer_needed": "Not Needed",
+            "lawyer_reason": "Immediate healthcare support is paramount.",
         }
+        risk = "high"
+        confidence = 1.0
+        fallback_used = False
+        statutes = sections["relevant_laws"]
+        steps = sections["action_roadmap"]
+        rights = sections["important_rights"]
+        sources = []
+        follow_ups = []
+        answer_source = "emergency_router"
+        fallback_reason = None
+        latency = 0.05
+    else:
+        # 5. Build recent conversation context (Max N messages from config)
+        past_msgs = get_messages(conversation_id) if conversation_id else []
+        valid_history = [
+            m for m in past_msgs[:-1]
+            if not (m.get("metadata") or {}).get("blocked")
+        ]
+        recent_history = valid_history[-GUARDRAILS_CONFIG.max_context_messages:]
+        history_lines = []
+        for m in recent_history:
+            role = "User" if m.get("role") == "user" else "Assistant"
+            snip = str(m.get("content", ""))[:300].strip().replace("\n", " ")
+            history_lines.append(f"{role}: {snip}")
+        history_context = "\n".join(history_lines) if history_lines else ""
 
-    sections = final_result.get("answer_sections", {}) or {}
-    raw_reply = final_result.get("raw_answer") or sections.get("legal_summary") or "Advice generated."
+        # 6. Call Existing RAG + LLM + Fallback + Risk pipeline
+        try:
+            runner = run_query(query=text_for_llm, history_context=history_context)
+            final_result = None
+            for event in runner:
+                if event.get("node") == "complete":
+                    final_result = event.get("result")
 
-    risk = final_result.get("risk", "low")
-    confidence = final_result.get("confidence_score", 0.0)
-    fallback_used = (
-        final_result.get("answer_source") in ("huggingface_fallback", "openrouter_qwen")
-        or bool(final_result.get("fallback_reason"))
-    )
+            if not final_result:
+                raise RuntimeError("Pipeline failed to produce a final legal response.")
+        except Exception as e:
+            logger.error(f"Legal pipeline execution failed: {e}")
+            final_result = {
+                "raw_answer": f"An error occurred while analyzing this legal matter: {str(e)}. Please try rephrasing your question.",
+                "answer_sections": {
+                    "legal_summary": "Service encountered a processing error.",
+                    "relevant_laws": [],
+                    "action_roadmap": [],
+                    "important_rights": [],
+                    "lawyer_needed": "Required",
+                    "lawyer_reason": "Technical processing exception.",
+                },
+                "risk": "medium",
+                "confidence_score": 0.0,
+                "answer_source": "error_handler",
+                "fallback_reason": str(e),
+                "retrieved_chunks": [],
+            }
 
-    statutes = sections.get("relevant_laws", [])
-    steps = sections.get("action_roadmap", [])
-    rights = sections.get("important_rights", [])
-    sources = final_result.get("retrieved_chunks", []) or final_result.get("sources", [])
+        sections = final_result.get("answer_sections", {}) or {}
+        raw_reply = final_result.get("raw_answer") or sections.get("legal_summary") or "Advice generated."
 
-    # 4. Generate dynamic follow-ups
-    follow_ups = generate_followups(question=clean_text, answer=raw_reply)
+        # If an emergency was detected (domestic violence, arrest, sexual assault, child abuse),
+        # prepend the calm supportive helpline message to the TOP of the response
+        if emergency_banner:
+            raw_reply = f"{emergency_banner}\n\n---\n\n{raw_reply}"
 
-    # 5. Assemble metadata
+        # If PII was masked, attach privacy notice
+        if guard_ctx.get("pii_masked"):
+            raw_reply = f"{GUARDRAILS_CONFIG.pii_notice}\n\n{raw_reply}"
+
+        risk = "high" if emergency_type else final_result.get("risk", "low")
+        confidence = final_result.get("confidence_score", 0.0)
+        fallback_used = (
+            final_result.get("answer_source") in ("huggingface_fallback", "openrouter_qwen")
+            or bool(final_result.get("fallback_reason"))
+        )
+
+        statutes = sections.get("relevant_laws", [])
+        steps = sections.get("action_roadmap", [])
+        rights = sections.get("important_rights", [])
+        sources = final_result.get("retrieved_chunks", []) or final_result.get("sources", [])
+        answer_source = final_result.get("answer_source", "RAG")
+        fallback_reason = final_result.get("fallback_reason")
+        latency = final_result.get("latency")
+
+        # Generate dynamic follow-ups
+        follow_ups = generate_followups(question=text_for_llm, answer=raw_reply)
+
+    # 6. Run Output Guardrails (PII, Prompt Leak, Overconfidence, Grounding, Confidence, Disclaimer)
+    output_ctx = {
+        "conversation_id": conversation_id,
+        "confidence_score": confidence if (confidence is not None and confidence > 0.0) else (final_result.get("confidence_score") if 'final_result' in locals() and final_result else None),
+        "retrieved_chunks": sources,
+        "user_query": text_for_llm,
+    }
+    out_res = run_output_guardrails(raw_reply, context=output_ctx)
+    if not out_res.allowed or out_res.action == "block":
+        raw_reply = out_res.user_message or "This response could not be displayed due to safety guidelines."
+    elif out_res.sanitized_text:
+        raw_reply = out_res.sanitized_text
+
+    # 7. Assemble metadata
     metadata = {
         "risk": risk,
         "confidence": confidence,
@@ -178,14 +305,17 @@ def send_message(conversation_id: Optional[str], user_text: str) -> ChatResponse
         "rights": rights,
         "sources": sources,
         "follow_ups": follow_ups,
-        "answer_source": final_result.get("answer_source", "RAG"),
-        "fallback_reason": final_result.get("fallback_reason"),
+        "answer_source": answer_source,
+        "fallback_reason": fallback_reason,
         "lawyer_needed": sections.get("lawyer_needed", "Optional"),
         "lawyer_reason": sections.get("lawyer_reason", ""),
-        "latency": final_result.get("latency"),
+        "latency": latency,
+        "pii_masked": guard_ctx.get("pii_masked", False),
+        "emergency_type": emergency_type,
+        "emergency_routed": bool(emergency_type),
     }
 
-    # 6. Save Assistant Reply with metadata
+    # 8. Save Assistant Reply with metadata
     add_message(
         conversation_id=conversation_id,
         role="assistant",
